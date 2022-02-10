@@ -11,18 +11,61 @@
 #include <strings.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <string.h>
 
 #define SERVER_TCP_PORT		7000	// Default port
 #define BUFLEN			    1024 	// Buffer length
+#define CONNECTION_LIMIT    15000   // Max # of clients
+#define ITER_LIMIT          10000   // Max # of iterations
+
+static void SystemFatal(const char* message)
+{
+    perror (message);
+    exit (EXIT_FAILURE);
+}
+
+int setup(int *num_connections, int *message_len, int *iterations)
+{
+    char ibuf[BUFLEN];
+    printf("Num clients(Limit here): ");
+    fgets(ibuf, BUFLEN, stdin);
+    *num_connections = atoi(ibuf);
+    if(1 > *num_connections||*num_connections > 15000)
+    {
+        SystemFatal("Improper number of connections");
+        return 0;
+    }
+
+    printf("Length of message in bytes(1 - 1023): ");
+    fgets(ibuf, BUFLEN, stdin);
+    *message_len = atoi(ibuf);
+    if(1 > *message_len||*message_len > 1024)
+    {
+        SystemFatal("Improper message length");
+        return 0;
+    }
+
+    printf("Times to send message(Limit here): ");
+    fgets(ibuf, BUFLEN, stdin);
+    *iterations = atoi(ibuf);
+    if(1 > *iterations||*iterations > 10000)
+    {
+        SystemFatal("Improper number of iterations");
+        return 0;
+    }
+    return 1;
+}
 
 int main (int argc, char **argv)
 {
     int n, bytes_to_read;
     int sd, port;
+    int num_connections, message_len, iterations;
     struct hostent	*hp;
     struct sockaddr_in server;
-    char  *host, *bp, rbuf[BUFLEN], sbuf[BUFLEN], **pptr;
+    char  *host, *bp, rbuf[BUFLEN], sbuf[BUFLEN],  **pptr;
     char str[16];
+
 
     switch(argc)
     {
@@ -38,6 +81,19 @@ int main (int argc, char **argv)
             fprintf(stderr, "Usage: %s host [port]\n", argv[0]);
             exit(1);
     }
+
+    if(!setup(&num_connections,&message_len,&iterations))
+    {
+        SystemFatal("Setup issue");
+    }
+
+
+    memset(sbuf,'X',message_len);
+    sbuf[message_len] = '\0';
+
+    //fork or create threads here
+
+
 
     // Create the socket
     if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
@@ -71,24 +127,27 @@ int main (int argc, char **argv)
     printf("Transmit:\n");
 
     // get user's text
-    fgets (sbuf, BUFLEN, stdin);
+    for(int b = 0; b < iterations;b++) {
+        send (sd, sbuf, BUFLEN, 0);
+
+        printf("Receive:\n");
+        bp = rbuf;
+        bytes_to_read = BUFLEN;
+
+        // client makes repeated calls to recv until no more data is expected to arrive.
+        n = 0;
+        while ((n = recv (sd, bp, bytes_to_read, 0)) < BUFLEN)
+        {
+            bp += n;
+            bytes_to_read -= n;
+        }
+        printf ("%s\n", rbuf);
+        fflush(stdout);
+    }
+    //fgets (sbuf, BUFLEN, stdin);
 
     // Transmit data through the socket
-    send (sd, sbuf, BUFLEN, 0);
 
-    printf("Receive:\n");
-    bp = rbuf;
-    bytes_to_read = BUFLEN;
-
-    // client makes repeated calls to recv until no more data is expected to arrive.
-    n = 0;
-    while ((n = recv (sd, bp, bytes_to_read, 0)) < BUFLEN)
-    {
-        bp += n;
-        bytes_to_read -= n;
-    }
-    printf ("%s\n", rbuf);
-    fflush(stdout);
     close (sd);
     return (0);
 }

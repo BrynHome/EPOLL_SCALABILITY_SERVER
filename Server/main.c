@@ -76,6 +76,16 @@ static int read_sock(int fd)
             bp += n;
             bytes_to_read -= n;
         }
+        if(n <= 0) {
+            if(n == 0) {
+                printf("connection done");
+            }
+            else{
+                perror("recv");
+            }
+            close(fd);
+            return FALSE;
+        }
         //CHECK IF DATA IS DONE SENDING BEFORE CLOSING TO ADD
         //if(strstr(buf,end) != NULL)
         //  send(fd,buf,BUFLEN,0);
@@ -84,7 +94,7 @@ static int read_sock(int fd)
         printf ("sending:%s\n", buf);
 
         send (fd, buf, BUFLEN, 0);
-        close (fd);
+        //close (fd);
         return TRUE;
     }
     close(fd);
