@@ -12,12 +12,16 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <string.h>
+#include <pthread.h>
 
 #define SERVER_TCP_PORT		7000	// Default port
 #define BUFLEN			    1024 	// Buffer length
 #define CONNECTION_LIMIT    15000   // Max # of clients
 #define ITER_LIMIT          10000   // Max # of iterations
+pthread_cond_t cond1 = PTHREAD_COND_INITIALIZER;
 
+// declaring mutex
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static void SystemFatal(const char* message)
 {
     perror (message);
@@ -90,11 +94,12 @@ int main (int argc, char **argv)
 
     memset(sbuf,'X',message_len);
     sbuf[message_len] = '\0';
+    int all_conn=0;
 
     //fork or create threads here
 
-
-
+    //NEED TO ADD VARIABLE TO CONTROL IF ALL CONNECT BEFORE SENDING
+    pthread_mutex_lock(&lock);
     // Create the socket
     if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
@@ -124,6 +129,14 @@ int main (int argc, char **argv)
     printf("Connected:    Server Name: %s\n", hp->h_name);
     pptr = hp->h_addr_list;
     printf("\t\tIP Address: %s\n", inet_ntop(hp->h_addrtype, *pptr, str, sizeof(str)));
+    if(all_conn < num_connections) {
+        all_conn++;
+        pthread_cond_wait(&cond1,&lock);
+    } else {
+        printf("all connected");
+        pthread_cond_signal(&cond1);
+    }
+    pthread_mutex_unlock(&lock);
     printf("Transmit:\n");
 
     // get user's text
