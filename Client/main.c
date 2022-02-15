@@ -131,10 +131,10 @@ int main (int argc, char **argv)
         num_core = omp_get_num_threads();
         thread_num = omp_get_thread_num();
         //NEED TO ADD VARIABLE TO CONTROL IF ALL CONNECT BEFORE SENDING
-        if(connect_all == 2) {
-            pthread_mutex_lock(&lock);
-        }
         // Create the socket
+        if(connect_all == 2) {
+            #pragma omp barrier
+        }
         if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
         {
             perror("Cannot create socket");
@@ -157,14 +157,7 @@ int main (int argc, char **argv)
         pptr = hp->h_addr_list;
         printf("\t\tIP Address: %s\n", inet_ntop(hp->h_addrtype, *pptr, str, sizeof(str)));
         if(connect_all == 2) {
-            if(all_conn < num_connections) {
-                all_conn++;
-                pthread_cond_wait(&cond1,&lock);
-            } else {
-                printf("all connected\n");
-                pthread_cond_signal(&cond1);
-            }
-            pthread_mutex_unlock(&lock);
+            #pragma omp barrier
         }
 
         //printf("Transmit:\n");
@@ -172,7 +165,7 @@ int main (int argc, char **argv)
         // get user's text
         for(int b = 0; b < iterations;b++) {
             send (sd, sbuf, BUFLEN, 0);
-
+            printf("send %d\n", thread_num);
             //printf("Receive:\n");
             bp = rbuf;
             bytes_to_read = BUFLEN;
@@ -184,13 +177,14 @@ int main (int argc, char **argv)
                 bp += n;
                 bytes_to_read -= n;
             }
-            //printf ("%s %d\n", rbuf,thread_num);
+            printf ("rec %d\n", thread_num);
             fflush(stdout);
         }
         //fgets (sbuf, BUFLEN, stdin);
 
         // Transmit data through the socket
         printf ("%d done\n", thread_num);
+        #pragma omp barrier
         close (sd);
     }
 

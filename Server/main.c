@@ -15,6 +15,7 @@
 #include <strings.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <omp.h>
 
 #define TRUE 		        1
 #define FALSE 		        0
@@ -102,8 +103,12 @@ static int read_sock(int fd)
     return FALSE;
 }
 
+int test() {
+
+}
+
 int main(int argc, char* argv[]) {
-    int i, arg;
+    int arg;
     int num_fds, fd_new, epoll_fd;
     static struct epoll_event events[EPOLL_QUEUE_LEN], event;
     int port = SERVER_PORT;
@@ -144,7 +149,7 @@ int main(int argc, char* argv[]) {
         SystemFatal("bind");
 
     // Listen for fd_news; BACKLOG is 128 by default
-    if (listen (fd_server, BACKLOG) == -1)
+    if (listen (fd_server, SOMAXCONN) == -1)
         SystemFatal("listen");
 
     // Create the epoll file descriptor
@@ -163,18 +168,19 @@ int main(int argc, char* argv[]) {
     {
         //struct epoll_event events[MAX_EVENTS];
         num_fds = epoll_wait (epoll_fd, events, EPOLL_QUEUE_LEN, -1);
-
+        int i=0,num_core =1;
         if (num_fds < 0)
             SystemFatal ("Error in epoll_wait!");
-
-        for (i = 0; i < num_fds; i++)
+        omp_set_num_threads(num_fds);
+        #pragma omp parallel private(i,num_core)
         {
-            // Case 1: Error condition
+            num_core = omp_get_num_threads();
+            i = omp_get_thread_num();
             if (events[i].events & (EPOLLHUP | EPOLLERR))
             {
                 fputs("epoll: EPOLLERR", stderr);
                 close(events[i].data.fd);
-                continue;
+
             }
             assert (events[i].events & EPOLLIN);
 
@@ -189,13 +195,13 @@ int main(int argc, char* argv[]) {
                     {
                         perror("accept");
                     }
-                    continue;
+
                 }
 
                 // Make the fd_new non-blocking
                 set_not_block(fd_new);
                 //if (fcntl (fd_new, F_SETFL, O_NONBLOCK | fcntl(fd_new, F_GETFL, 0)) == -1)
-                    //SystemFatal("fcntl");
+                //SystemFatal("fcntl");
 
                 // Add the new socket descriptor to the epoll loop
                 event.data.fd = fd_new;
@@ -203,17 +209,21 @@ int main(int argc, char* argv[]) {
                     SystemFatal ("epoll_ctl");
 
                 printf(" Remote Address:  %s\n", inet_ntoa(remote_addr.sin_addr));
-                continue;
+
+            }else
+            {
+                if (!read_sock(events[i].data.fd)){
+                    close (events[i].data.fd);
+                }
+                // epoll will remove the fd from its set
+                // automatically when the fd is closed
+
             }
 
             // Case 3: One of the sockets has read data
-            if (!read_sock(events[i].data.fd))
-            {
-                // epoll will remove the fd from its set
-                // automatically when the fd is closed
-                close (events[i].data.fd);
-            }
+
         }
+
     }
     close(fd_server);
     exit (EXIT_SUCCESS);
