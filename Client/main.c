@@ -111,7 +111,7 @@ int main (int argc, char **argv)
 
     memset(sbuf,'X',message_len);
     sbuf[message_len] = '\0';
-    int all_conn=0;
+    int all_conn=1;
     omp_set_num_threads(num_connections);
     bzero((char *)&server, sizeof(struct sockaddr_in));
     server.sin_family = AF_INET;
@@ -140,8 +140,10 @@ int main (int argc, char **argv)
             perror("Cannot create socket");
             exit(1);
         }
-
-
+        struct timeval tv;
+        tv.tv_sec = 2;
+        tv.tv_usec = 0;
+        setsockopt(sd,SOL_SOCKET,SO_RCVTIMEO, (const char*)&tv, sizeof tv);
 
         // Connecting to the server
         if (connect (sd, (struct sockaddr *)&server, sizeof(server)) == -1)
@@ -182,7 +184,7 @@ int main (int argc, char **argv)
                 bp += n;
                 bytes_to_read -= n;
             }
-            printf ("%s\n", rbuf);
+            printf ("%s %d\n", rbuf,thread_num);
             fflush(stdout);
         }
         //fgets (sbuf, BUFLEN, stdin);
