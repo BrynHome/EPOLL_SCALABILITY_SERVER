@@ -161,7 +161,7 @@ int main (int argc, char **argv)
                 all_conn++;
                 pthread_cond_wait(&cond1,&lock);
             } else {
-                printf("all connected");
+                printf("all connected\n");
                 pthread_cond_signal(&cond1);
             }
             pthread_mutex_unlock(&lock);
@@ -184,13 +184,13 @@ int main (int argc, char **argv)
                 bp += n;
                 bytes_to_read -= n;
             }
-            printf ("%s %d\n", rbuf,thread_num);
+            //printf ("%s %d\n", rbuf,thread_num);
             fflush(stdout);
         }
         //fgets (sbuf, BUFLEN, stdin);
 
         // Transmit data through the socket
-
+        printf ("%d done\n", thread_num);
         close (sd);
     }
 

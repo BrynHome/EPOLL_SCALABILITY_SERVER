@@ -71,11 +71,12 @@ static int read_sock(int fd)
 
         bp = buf;
         bytes_to_read = BUFLEN;
-        while ((n = recv (fd, bp, bytes_to_read, 0)) < BUFLEN)
+        n = recv (fd, bp, bytes_to_read, 0);
+        /*while ((n = recv (fd, bp, bytes_to_read, 0)) < BUFLEN)
         {
             bp += n;
             bytes_to_read -= n;
-        }
+        }*/
         if(n <= 0) {
             if(n == 0) {
                 printf("connection done");
