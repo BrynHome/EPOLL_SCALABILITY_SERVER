@@ -1,4 +1,6 @@
 /etc/clion-2021.3.2/bin/cmake/linux/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=/etc/clion-2021.3.2/bin/ninja/linux/ninja -G Ninja "/root/Documents/8005/Assign 3/EPOLL_SCALABILITY_SERVER/Server"
+-- Found OpenMP_C: -fopenmp (found version "4.5") 
+-- Found OpenMP: TRUE (found version "4.5")  
 -- Configuring done
 -- Generating done
 -- Build files have been written to: /root/Documents/8005/Assign 3/EPOLL_SCALABILITY_SERVER/Server/cmake-build-debug

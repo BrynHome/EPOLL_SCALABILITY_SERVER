@@ -84,8 +84,9 @@ void *client_thread(void *info_ptr) {
     } else {
         printf("all connected\n");
         pthread_cond_signal(&cond1);
+        pthread_mutex_unlock(&lock);
     }
-    pthread_mutex_unlock(&lock);
+
     //printf("Transmit:\n");
 
     // get user's text
