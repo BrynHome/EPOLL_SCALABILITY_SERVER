@@ -79,14 +79,14 @@ void *client_thread(void *info_ptr) {
     printf("\t\tIP Address: %s\n", inet_ntop(hp->h_addrtype, *pptr, str, sizeof(str)));
     if(all_conn < num_connections) {
         all_conn++;
-        printf("a\n");
+        //printf("a\n");
         pthread_cond_wait(&cond1,&lock);
     } else {
         printf("all connected\n");
         pthread_cond_signal(&cond1);
     }
     pthread_mutex_unlock(&lock);
-    printf("Transmit:\n");
+    //printf("Transmit:\n");
 
     // get user's text
     for(int b = 0; b < iterations;b++) {
@@ -182,9 +182,9 @@ int main (int argc, char **argv)
     }
     for(int i =0; i<num_connections;i++) {
         pthread_join(threads[i], NULL);
-        free(a);
+        //free(a);
     }
-
+    free(a);
 
 
     //fork or create threads here
