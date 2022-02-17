@@ -93,7 +93,7 @@ void *client_thread(void *info_ptr) {
     for(int b = 0; b < iterations;b++) {
         send (sd, sbuf, BUFLEN, 0);
 
-        printf("Receive:\n");
+        //printf("Receive:\n");
         bp = rbuf;
         bytes_to_read = BUFLEN;
 
@@ -104,13 +104,13 @@ void *client_thread(void *info_ptr) {
             bp += n;
             bytes_to_read -= n;
         }
-        printf ("%s\n", rbuf);
+        //printf ("%s\n", rbuf);
         fflush(stdout);
     }
     //fgets (sbuf, BUFLEN, stdin);
 
     // Transmit data through the socket
-
+    printf("done\n");
     close (sd);
 }
 
@@ -179,7 +179,10 @@ int main (int argc, char **argv)
     a->num_connections = num_connections;
     pthread_t threads[num_connections];
     for(int i = 0; i < num_connections;i++) {
-        pthread_create(&threads[i], NULL, client_thread,(void * )a);
+        if(pthread_create(&threads[i], NULL, client_thread,(void * )a)!= 0)
+        {
+            printf("error in pthread");
+        }
     }
     for(int i =0; i<num_connections;i++) {
         pthread_join(threads[i], NULL);

@@ -25,6 +25,13 @@
 #define BACKLOG             128
 int fd_server;
 
+struct {
+    int sock;
+    char host;
+    int requests;
+    int data;
+}client_data;
+
 static void SystemFatal(const char* message) {
     perror(message);
     exit(EXIT_FAILURE);
@@ -150,10 +157,10 @@ void epoll_descriptor(int *epoll_fd)
 }
 
 
-void epoll_connect(int *epoll,struct epoll_event *event)
+void epoll_connect(int *epoll)
 {
     int fd_new;
-
+    static struct epoll_event event;
     struct sockaddr_in remote_addr;
     socklen_t addr_size = sizeof(struct sockaddr_in);
     fd_new = accept (fd_server, (struct sockaddr*) &remote_addr, &addr_size);
@@ -170,10 +177,11 @@ void epoll_connect(int *epoll,struct epoll_event *event)
     //set_not_block(fd_new);
     if (fcntl (fd_new, F_SETFL, O_NONBLOCK | fcntl(fd_new, F_GETFL, 0)) == -1)
         SystemFatal("fcntl");
-
+    //event->events = EPOLLIN | EPOLLET;
     // Add the new socket descriptor to the epoll loop
-    event->data.fd = fd_new;
-    if (epoll_ctl (*epoll, EPOLL_CTL_ADD, fd_new, event) == -1)
+    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET| EPOLLRDHUP | EAGAIN;
+    event.data.fd = fd_new;
+    if (epoll_ctl (*epoll, EPOLL_CTL_ADD, fd_new, &event) == -1)
         SystemFatal ("epoll_ctl");
 
     printf(" Remote Address:  %s\n", inet_ntoa(remote_addr.sin_addr));
@@ -189,7 +197,7 @@ void epoll_loop(int *epoll)
     int epoll_fd = *epoll;
     int num_fds,i,thread_id;
     static struct epoll_event events[EPOLL_QUEUE_LEN], event;
-    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET| EPOLLRDHUP;
+    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET| EPOLLRDHUP | EAGAIN;
     event.data.fd = fd_server;
     if (epoll_ctl (epoll_fd, EPOLL_CTL_ADD, fd_server, &event) == -1)
         SystemFatal("epoll_ctl");
@@ -199,34 +207,36 @@ void epoll_loop(int *epoll)
         num_fds = epoll_wait (epoll_fd, events, EPOLL_QUEUE_LEN, -1);
 
         if (num_fds < 0)
-            SystemFatal ("Error in epoll_wait!");
-            omp_set_num_threads(num_fds);
-            #pragma omp parallel private(thread_id)
-            {
-                #pragma omp for
-                for (i = 0; i < num_fds; i++) {
-                    // Case 1: Error condition
-                    if (events[i].events & (EPOLLERR))
-                    {
-                        fputs("epoll: EPOLLERR", stderr);
-                        close(events[i].data.fd);
-                        continue;
-                    }
-                    //Case 2 close
-                    if(events[i].events & (EPOLLHUP |EPOLLRDHUP))
-                    {
-                        printf("Connection closed\n");
-                        close(events[i].data.fd);
-                        continue;
-                    }
-                    assert (events[i].events & EPOLLIN);
-                    //Case 3: Connection request
-                    if(events[i].data.fd == fd_server) {
-                        epoll_connect(&epoll_fd,&event);
-                        continue;
-                    }
-                    //Case 4: A socket has read data
-                    read_sock(events[i].data.fd);
+            //SystemFatal ("Error in epoll_wait!");
+            continue;
+
+        omp_set_num_threads(num_fds);
+        #pragma omp parallel private(thread_id)
+        {
+            #pragma omp for
+            for (i = 0; i < num_fds; i++) {
+                // Case 1: Error condition
+                if (events[i].events & (EPOLLERR))
+                {
+                    fputs("epoll: EPOLLERR", stderr);
+                    close(events[i].data.fd);
+                    continue;
+                }
+                //Case 2 close
+                if(events[i].events & (EPOLLHUP |EPOLLRDHUP))
+                {
+                    printf("Connection closed\n");
+                    close(events[i].data.fd);
+                    continue;
+                }
+                assert (events[i].events & EPOLLIN);
+                //Case 3: Connection request
+                if(events[i].data.fd == fd_server) {
+                    epoll_connect(&epoll_fd);
+                    continue;
+                }
+                //Case 4: A socket has read data
+                read_sock(events[i].data.fd);
 
             }
 
