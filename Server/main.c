@@ -15,28 +15,38 @@
 #include <strings.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <omp.h>
 
 #define TRUE 		        1
 #define FALSE 		        0
-#define EPOLL_QUEUE_LEN	    256
-#define BUFLEN		        1024
-#define SERVER_PORT	        7000
+#define EPOLL_QUEUE_LEN     15000
+#define BUFLEN              1024
+#define SERVER_PORT         7000
 #define BACKLOG             128
-
 int fd_server;
 
-// Prints the error stored in errno and aborts the program.
-static void SystemFatal(const char* message)
-{
-    perror (message);
-    exit (EXIT_FAILURE);
+struct {
+    int sock;
+    char host;
+    int requests;
+    int data;
+}client_data;
+
+static void SystemFatal(const char* message) {
+    perror(message);
+    exit(EXIT_FAILURE);
 }
 
-// close fd
-void close_fd (int signo)
+void close_fd(int signo)
 {
     close(fd_server);
-    exit (EXIT_SUCCESS);
+    exit(EXIT_SUCCESS);
+}
+
+void open_fd()
+{
+    if (listen (fd_server, BACKLOG) == -1)
+        SystemFatal("listen");
 }
 
 int set_not_block(int sockfd)
@@ -58,59 +68,17 @@ int set_not_block(int sockfd)
     return 0;
 }
 
-//Read socket data and echo back. If done sending detected, close socket
-static int read_sock(int fd)
+int create_listening()
 {
-    int	n, bytes_to_read,iterations;
-    char	*bp, buf[BUFLEN];
-    int count = 0;
-    char *end = "/n";
-
-    while (TRUE)
-    {
-
-        bp = buf;
-        bytes_to_read = BUFLEN;
-        while ((n = recv (fd, bp, bytes_to_read, 0)) < BUFLEN)
-        {
-            bp += n;
-            bytes_to_read -= n;
-        }
-        if(n <= 0) {
-            if(n == 0) {
-                printf("connection done");
-            }
-            else{
-                perror("recv");
-            }
-            close(fd);
-            return FALSE;
-        }
-        //CHECK IF DATA IS DONE SENDING BEFORE CLOSING TO ADD
-        //if(strstr(buf,end) != NULL)
-        //  send(fd,buf,BUFLEN,0);
-        //  close(fd);
-        //  return TRUE
-        printf ("sending:%s\n", buf);
-
-        send (fd, buf, BUFLEN, 0);
-        //close (fd);
-        return TRUE;
-    }
-    close(fd);
-    return FALSE;
+    fd_server = socket (AF_INET, SOCK_STREAM, 0);
+    if (fd_server == -1)
+        SystemFatal("socket");
 }
 
-int main(int argc, char* argv[]) {
-    int i, arg;
-    int num_fds, fd_new, epoll_fd;
-    static struct epoll_event events[EPOLL_QUEUE_LEN], event;
-    int port = SERVER_PORT;
-    struct sockaddr_in addr, remote_addr;
-    socklen_t addr_size = sizeof(struct sockaddr_in);
+// set up the signal handler to close the server socket when CTRL-c is received
+void sig_handler()
+{
     struct sigaction act;
-
-    // set up the signal handler to close the server socket when CTRL-c is received
     act.sa_handler = close_fd;
     act.sa_flags = 0;
     if ((sigemptyset (&act.sa_mask) == -1 || sigaction (SIGINT, &act, NULL) == -1))
@@ -118,102 +86,173 @@ int main(int argc, char* argv[]) {
         perror ("Failed to set SIGINT handler");
         exit (EXIT_FAILURE);
     }
+}
 
-    // Create the listening socket
-    fd_server = socket (AF_INET, SOCK_STREAM, 0);
-    if (fd_server == -1)
-        SystemFatal("socket");
-
-    // set SO_REUSEADDR so port can be resused imemediately after exit, i.e., after CTRL-c
-    arg = 1;
-    if (setsockopt (fd_server, SOL_SOCKET, SO_REUSEADDR, &arg, sizeof(arg)) == -1)
-        SystemFatal("setsockopt");
-
-    // Make the server listening socket non-blocking
-    set_not_block(fd_server);
-    //if (fcntl (fd_server, F_SETFL, O_NONBLOCK | fcntl (fd_server, F_GETFL, 0)) == -1)
-        //SystemFatal("fcntl");
-
-    // Bind to the specified listening port
+void bind_sock(int port)
+{
+    struct sockaddr_in addr;
     memset (&addr, 0, sizeof (struct sockaddr_in));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port);
     if (bind (fd_server, (struct sockaddr*) &addr, sizeof(addr)) == -1)
         SystemFatal("bind");
+}
 
-    // Listen for fd_news; BACKLOG is 128 by default
-    if (listen (fd_server, BACKLOG) == -1)
-        SystemFatal("listen");
+void listen_sock_setup()
+{
+    int arg;
 
-    // Create the epoll file descriptor
-    epoll_fd = epoll_create(EPOLL_QUEUE_LEN);
-    if (epoll_fd == -1)
+    fd_server = socket (AF_INET, SOCK_STREAM, 0);
+    if (fd_server == -1)
+        SystemFatal("socket");
+
+    arg = 1;
+    if (setsockopt (fd_server, SOL_SOCKET, SO_REUSEADDR, &arg, sizeof(arg)) == -1)
+        SystemFatal("setsockopt");
+
+    set_not_block(fd_server);
+
+}
+
+
+
+static int read_sock(int fd)
+{
+    int	n, bytes_to_read,iterations;
+    char	*bp, buf[BUFLEN];
+    int count = 0;
+    char *end = "/n";
+    while (TRUE)
+    {
+        bp = buf;
+        bytes_to_read = BUFLEN;
+        while ((n = recv (fd, bp, bytes_to_read, 0)) < BUFLEN)
+        {
+            bp += n;
+            bytes_to_read -= n;
+            if (errno == EWOULDBLOCK)
+            {
+                continue;
+            }
+            //CHECK IF DATA IS DONE SENDING BEFORE CLOSING TO ADD
+            //if(strstr(buf,end) != NULL)
+            //  send(fd,buf,BUFLEN,0);
+            //  close(fd);
+            //  return TRUE
+        }
+        printf ("sending:%s\n", buf);
+        send (fd, buf, BUFLEN, 0);
+        //close (fd);
+        return TRUE;
+    }
+    //close(fd);
+    return FALSE;
+}
+void epoll_descriptor(int *epoll_fd)
+{
+    *epoll_fd = epoll_create(EPOLL_QUEUE_LEN);
+    if (*epoll_fd == -1)
         SystemFatal("epoll_create");
+}
 
-    // Add the server socket to the epoll event loop
-    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET;
+
+void epoll_connect(int *epoll)
+{
+    int fd_new;
+    static struct epoll_event event;
+    struct sockaddr_in remote_addr;
+    socklen_t addr_size = sizeof(struct sockaddr_in);
+    fd_new = accept (fd_server, (struct sockaddr*) &remote_addr, &addr_size);
+    if (fd_new == -1)
+    {
+        if (errno != EAGAIN && errno != EWOULDBLOCK)
+        {
+            perror("accept");
+        }
+        return;
+    }
+
+    // Make the fd_new non-blocking
+    //set_not_block(fd_new);
+    if (fcntl (fd_new, F_SETFL, O_NONBLOCK | fcntl(fd_new, F_GETFL, 0)) == -1)
+        SystemFatal("fcntl");
+    //event->events = EPOLLIN | EPOLLET;
+    // Add the new socket descriptor to the epoll loop
+    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET| EPOLLRDHUP | EAGAIN;
+    event.data.fd = fd_new;
+    if (epoll_ctl (*epoll, EPOLL_CTL_ADD, fd_new, &event) == -1)
+        SystemFatal ("epoll_ctl");
+
+    printf(" Remote Address:  %s\n", inet_ntoa(remote_addr.sin_addr));
+}
+
+
+
+
+
+
+void epoll_loop(int *epoll)
+{
+    int epoll_fd = *epoll;
+    int num_fds,i,thread_id;
+    static struct epoll_event events[EPOLL_QUEUE_LEN], event;
+    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET| EPOLLRDHUP | EAGAIN;
     event.data.fd = fd_server;
     if (epoll_ctl (epoll_fd, EPOLL_CTL_ADD, fd_server, &event) == -1)
         SystemFatal("epoll_ctl");
 
-    // Execute the epoll event loop
     while (TRUE)
     {
-        //struct epoll_event events[MAX_EVENTS];
         num_fds = epoll_wait (epoll_fd, events, EPOLL_QUEUE_LEN, -1);
 
         if (num_fds < 0)
-            SystemFatal ("Error in epoll_wait!");
+            //SystemFatal ("Error in epoll_wait!");
+            continue;
 
-        for (i = 0; i < num_fds; i++)
+        omp_set_num_threads(num_fds);
+        #pragma omp parallel private(thread_id)
         {
-            // Case 1: Error condition
-            if (events[i].events & (EPOLLHUP | EPOLLERR))
-            {
-                fputs("epoll: EPOLLERR", stderr);
-                close(events[i].data.fd);
-                continue;
-            }
-            assert (events[i].events & EPOLLIN);
-
-            // Case 2: Server is receiving a connection request
-            if (events[i].data.fd == fd_server)
-            {
-                //socklen_t addr_size = sizeof(remote_addr);
-                fd_new = accept (fd_server, (struct sockaddr*) &remote_addr, &addr_size);
-                if (fd_new == -1)
+            #pragma omp for
+            for (i = 0; i < num_fds; i++) {
+                // Case 1: Error condition
+                if (events[i].events & (EPOLLERR))
                 {
-                    if (errno != EAGAIN && errno != EWOULDBLOCK)
-                    {
-                        perror("accept");
-                    }
+                    fputs("epoll: EPOLLERR", stderr);
+                    close(events[i].data.fd);
                     continue;
                 }
+                //Case 2 close
+                if(events[i].events & (EPOLLHUP |EPOLLRDHUP))
+                {
+                    printf("Connection closed\n");
+                    close(events[i].data.fd);
+                    continue;
+                }
+                assert (events[i].events & EPOLLIN);
+                //Case 3: Connection request
+                if(events[i].data.fd == fd_server) {
+                    epoll_connect(&epoll_fd);
+                    continue;
+                }
+                //Case 4: A socket has read data
+                read_sock(events[i].data.fd);
 
-                // Make the fd_new non-blocking
-                set_not_block(fd_new);
-                //if (fcntl (fd_new, F_SETFL, O_NONBLOCK | fcntl(fd_new, F_GETFL, 0)) == -1)
-                    //SystemFatal("fcntl");
-
-                // Add the new socket descriptor to the epoll loop
-                event.data.fd = fd_new;
-                if (epoll_ctl (epoll_fd, EPOLL_CTL_ADD, fd_new, &event) == -1)
-                    SystemFatal ("epoll_ctl");
-
-                printf(" Remote Address:  %s\n", inet_ntoa(remote_addr.sin_addr));
-                continue;
             }
 
-            // Case 3: One of the sockets has read data
-            if (!read_sock(events[i].data.fd))
-            {
-                // epoll will remove the fd from its set
-                // automatically when the fd is closed
-                close (events[i].data.fd);
-            }
         }
     }
-    close(fd_server);
-    exit (EXIT_SUCCESS);
+    close_fd(0);
+}
+
+int main(int argc, char* argv[]) {
+    int port = SERVER_PORT;
+    sig_handler();
+    listen_sock_setup();
+    bind_sock(port);
+    open_fd();
+    int epoll_fd;
+    epoll_descriptor(&epoll_fd);
+    epoll_loop(&epoll_fd);
+    close_fd(1);
 }

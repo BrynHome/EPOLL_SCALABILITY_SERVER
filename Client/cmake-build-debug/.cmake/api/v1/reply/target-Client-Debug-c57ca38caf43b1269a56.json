@@ -2,7 +2,7 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "Server"
+			"path" : "Client"
 		}
 	],
 	"backtrace" : 1,
@@ -10,7 +10,8 @@
 	{
 		"commands" : 
 		[
-			"add_executable"
+			"add_executable",
+			"target_link_libraries"
 		],
 		"files" : 
 		[
@@ -24,7 +25,13 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 6,
+				"line" : 7,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 8,
 				"parent" : 0
 			}
 		]
@@ -36,6 +43,10 @@
 			[
 				{
 					"fragment" : "-g"
+				},
+				{
+					"backtrace" : 2,
+					"fragment" : "-pthread"
 				},
 				{
 					"fragment" : "-std=gnu99"
@@ -56,7 +67,7 @@
 			]
 		}
 	],
-	"id" : "Server::@6890427a1f51a3e7e1df",
+	"id" : "Client::@6890427a1f51a3e7e1df",
 	"link" : 
 	{
 		"commandFragments" : 
@@ -68,12 +79,16 @@
 			{
 				"fragment" : "",
 				"role" : "flags"
+			},
+			{
+				"fragment" : "-pthread",
+				"role" : "libraries"
 			}
 		],
 		"language" : "C"
 	},
-	"name" : "Server",
-	"nameOnDisk" : "Server",
+	"name" : "Client",
+	"nameOnDisk" : "Client",
 	"paths" : 
 	{
 		"build" : ".",

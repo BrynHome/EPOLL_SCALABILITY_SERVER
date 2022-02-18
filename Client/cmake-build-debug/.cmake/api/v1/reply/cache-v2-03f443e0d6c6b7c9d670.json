@@ -55,7 +55,7 @@
 				}
 			],
 			"type" : "INTERNAL",
-			"value" : "/root/Documents/8005/Assign 3/EPOLL_SCALABILITY_SERVER/Server/cmake-build-debug"
+			"value" : "/root/Documents/8005/Assign 3/EPOLL_SCALABILITY_SERVER/Client/cmake-build-debug"
 		},
 		{
 			"name" : "CMAKE_CACHE_MAJOR_VERSION",
@@ -442,6 +442,30 @@
 			"value" : ""
 		},
 		{
+			"name" : "CMAKE_HAVE_LIBC_PTHREAD",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Test CMAKE_HAVE_LIBC_PTHREAD"
+				}
+			],
+			"type" : "INTERNAL",
+			"value" : ""
+		},
+		{
+			"name" : "CMAKE_HAVE_PTHREAD_H",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Have include pthread.h"
+				}
+			],
+			"type" : "INTERNAL",
+			"value" : "1"
+		},
+		{
 			"name" : "CMAKE_HOME_DIRECTORY",
 			"properties" : 
 			[
@@ -451,7 +475,7 @@
 				}
 			],
 			"type" : "INTERNAL",
-			"value" : "/root/Documents/8005/Assign 3/EPOLL_SCALABILITY_SERVER/Server"
+			"value" : "/root/Documents/8005/Assign 3/EPOLL_SCALABILITY_SERVER/Client"
 		},
 		{
 			"name" : "CMAKE_INSTALL_PREFIX",
@@ -691,7 +715,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "Server"
+			"value" : "Client"
 		},
 		{
 			"name" : "CMAKE_RANLIB",
@@ -974,7 +998,7 @@
 			"value" : "FALSE"
 		},
 		{
-			"name" : "Server_BINARY_DIR",
+			"name" : "Client_BINARY_DIR",
 			"properties" : 
 			[
 				{
@@ -983,10 +1007,10 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "/root/Documents/8005/Assign 3/EPOLL_SCALABILITY_SERVER/Server/cmake-build-debug"
+			"value" : "/root/Documents/8005/Assign 3/EPOLL_SCALABILITY_SERVER/Client/cmake-build-debug"
 		},
 		{
-			"name" : "Server_IS_TOP_LEVEL",
+			"name" : "Client_IS_TOP_LEVEL",
 			"properties" : 
 			[
 				{
@@ -998,7 +1022,7 @@
 			"value" : "ON"
 		},
 		{
-			"name" : "Server_SOURCE_DIR",
+			"name" : "Client_SOURCE_DIR",
 			"properties" : 
 			[
 				{
@@ -1007,7 +1031,31 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "/root/Documents/8005/Assign 3/EPOLL_SCALABILITY_SERVER/Server"
+			"value" : "/root/Documents/8005/Assign 3/EPOLL_SCALABILITY_SERVER/Client"
+		},
+		{
+			"name" : "FIND_PACKAGE_MESSAGE_DETAILS_Threads",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Details about finding Threads"
+				}
+			],
+			"type" : "INTERNAL",
+			"value" : "[TRUE][v()]"
+		},
+		{
+			"name" : "THREADS_HAVE_PTHREAD_ARG",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Result of TRY_COMPILE"
+				}
+			],
+			"type" : "INTERNAL",
+			"value" : "TRUE"
 		}
 	],
 	"kind" : "cache",
