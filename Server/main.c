@@ -1,5 +1,5 @@
 /*
--- Compile: gcc -Wall -ggdb -o epolls epoll_svr.c
+-- Compile: gcc -Wall -ggdb -o epolls main.c -fopenmp
 ---------------------------------------------------------------------------------------*/
 
 #include <assert.h>
@@ -22,7 +22,7 @@
 #define EPOLL_QUEUE_LEN    50000
 #define BUFLEN              1024
 #define SERVER_PORT         7000
-#define BACKLOG             5000
+#define BACKLOG             10000
 int fd_server;
 int total_requests;
 int total_data;
