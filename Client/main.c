@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
+#include <sys/time.h>
 
 #define SERVER_TCP_PORT		7000	// Default port
 #define BUFLEN			    1024 	// Buffer length
@@ -22,6 +23,11 @@ typedef struct
 {
     int  port, message_len,num_connections, iterations;
     char  *host;
+    long response_times[ITER_LIMIT];
+    int response_bytes[ITER_LIMIT];
+    long total_time;
+    int total_bytes;
+    int total_requests;
 }args;
 pthread_cond_t cond1 = PTHREAD_COND_INITIALIZER;
 int all_conn=1;
@@ -33,20 +39,38 @@ static void SystemFatal(const char* message)
     exit (EXIT_FAILURE);
 }
 
+// Compute the delay between tl and t2 in milliseconds
+long delay (struct timeval t1, struct timeval t2)
+{
+    long d;
+
+    d = (t2.tv_sec - t1.tv_sec) * 1000;
+    d += ((t2.tv_usec - t1.tv_usec + 500) / 1000);
+    return(d);
+}
+
 void *client_thread(void *info_ptr) {
     int n, bytes_to_read,sd;
-    char *bp, rbuf[BUFLEN], sbuf[BUFLEN],  **pptr;
-    char str[16];
-    struct hostent	*hp;
-    struct sockaddr_in server;
-
     args *a = (args *)info_ptr;
     int  port = a->port, message_len=a->message_len, num_connections = a->num_connections,iterations=a->iterations;
     char  *host = a->host;
+    char *bp, rbuf[message_len+1], sbuf[message_len+1],  **pptr;
+    char str[16];
+    struct hostent	*hp;
+    struct sockaddr_in server;
+    static char *end = "\n";
+
+
+    struct  timeval start_echo, end_echo;
+
+
+    a->total_time = 0;
+    a->total_bytes = 0;
+
 
     //NEED TO ADD VARIABLE TO CONTROL IF ALL CONNECT BEFORE SENDING
     memset(sbuf,'X',message_len);
-    sbuf[message_len] = '\0';
+    sbuf[message_len] = '\n';
     pthread_mutex_lock(&lock);
     // Create the socket
     if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
@@ -89,26 +113,30 @@ void *client_thread(void *info_ptr) {
     //printf("Transmit:\n");
 
     // get user's text
-    for(int b = 0; b < iterations;b++) {
-        send (sd, sbuf, BUFLEN, 0);
+    for(a->total_requests = 0; a->total_requests < iterations; a->total_requests++) {
+        gettimeofday(&start_echo, NULL);
+        a->total_bytes+=(message_len+1);
+        send (sd, sbuf, message_len+1, 0);
 
         //printf("Receive:\n");
         bp = rbuf;
-        bytes_to_read = BUFLEN;
+        bytes_to_read = message_len+1;
 
         // client makes repeated calls to recv until no more data is expected to arrive.
         n = 0;
-        while ((n = recv (sd, bp, bytes_to_read, 0)) < BUFLEN)
+        while ((n = recv (sd, bp, bytes_to_read, 0)) < (message_len+1))
         {
             bp += n;
             bytes_to_read -= n;
+
         }
+        gettimeofday (&end_echo, NULL); // end delay measure
+        a->response_times[a->total_requests] = delay(start_echo, end_echo);
+        a->total_time += a->response_times[a->total_requests];
         //printf ("%s\n", rbuf);
         fflush(stdout);
     }
-    //fgets (sbuf, BUFLEN, stdin);
 
-    // Transmit data through the socket
     printf("done\n");
     close (sd);
 }
@@ -150,7 +178,7 @@ int main (int argc, char **argv)
 
     int  port, num_connections, message_len, iterations;
     char  *host;
-    args *a = malloc(sizeof(args));
+
 
     switch(argc)
     {
@@ -171,23 +199,28 @@ int main (int argc, char **argv)
     {
         SystemFatal("Setup issue");
     }
-    a->host=host;
-    a->port = port;
-    a->iterations=iterations;
-    a->message_len = message_len;
-    a->num_connections = num_connections;
+    args *thread_info[num_connections];
     pthread_t threads[num_connections];
     for(int i = 0; i < num_connections;i++) {
-        if(pthread_create(&threads[i], NULL, client_thread,(void * )a)!= 0)
+        thread_info[i] = malloc(sizeof(args));
+        thread_info[i]->host=host;
+        thread_info[i]->port = port;
+        thread_info[i]->iterations=iterations;
+        thread_info[i]->message_len = message_len;
+        thread_info[i]->num_connections = num_connections;
+        if(pthread_create(&threads[i], NULL, client_thread,(void * )thread_info[i])!= 0)
         {
             printf("error in pthread");
         }
     }
     for(int i =0; i<num_connections;i++) {
         pthread_join(threads[i], NULL);
-        //free(a);
+
     }
-    free(a);
+    for(int i =0; i<num_connections;i++) {
+        free(thread_info[i]);
+
+    }
 
 
     //fork or create threads here

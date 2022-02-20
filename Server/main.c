@@ -19,12 +19,13 @@
 
 #define TRUE 		        1
 #define FALSE 		        0
-#define EPOLL_QUEUE_LEN     15000
+#define EPOLL_QUEUE_LEN    50000
 #define BUFLEN              1024
 #define SERVER_PORT         7000
-#define BACKLOG             128
+#define BACKLOG             5000
 int fd_server;
-
+int total_requests;
+int total_data;
 struct {
     int sock;
     char host;
@@ -122,7 +123,7 @@ static int read_sock(int fd)
     int	n, bytes_to_read,iterations;
     char	*bp, buf[BUFLEN];
     int count = 0;
-    char *end = "/n";
+    char *end = "\n";
     while (TRUE)
     {
         bp = buf;
@@ -136,12 +137,15 @@ static int read_sock(int fd)
                 continue;
             }
             //CHECK IF DATA IS DONE SENDING BEFORE CLOSING TO ADD
-            //if(strstr(buf,end) != NULL)
-            //  send(fd,buf,BUFLEN,0);
-            //  close(fd);
-            //  return TRUE
+            if(strstr(buf,end) != NULL){
+                //printf ("sending:%s\n", buf);
+                int bytes_rec = BUFLEN - bytes_to_read;
+                send(fd,buf,bytes_rec,0);
+                return TRUE;
+            }
+
         }
-        printf ("sending:%s\n", buf);
+        //printf ("sending:%s\n", buf);
         send (fd, buf, BUFLEN, 0);
         //close (fd);
         return TRUE;
