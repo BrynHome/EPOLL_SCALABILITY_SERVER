@@ -6,3 +6,11 @@ Server results
 Average of 5 requests per connection
 Average of 30 bytes sent to each client
 Average of 6 bytes per message
+------------------
+Server results
+10 total connections
+100 total requests
+1100 total data sent
+Average of 10 requests per connection
+Average of 110 bytes sent to each client
+Average of 11 bytes per message
