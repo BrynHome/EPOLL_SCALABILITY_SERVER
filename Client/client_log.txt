@@ -1,0 +1,10 @@
+--------------
+Connection with:
+5 Number of Clients
+5 bytes of data for each message +1 for end char
+Each client sending 5 messages
+||||||RESULTS|||||||
+5 average request from each client
+6 average data sent
+262 microsecond average response time
+0 Timeouts

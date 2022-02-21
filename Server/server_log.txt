@@ -1,0 +1,8 @@
+------------------
+Server results
+5 total connections
+25 total requests
+150 total data sent
+Average of 5 requests per connection
+Average of 30 bytes sent to each client
+Average of 6 bytes per message

@@ -23,16 +23,19 @@
 #define BUFLEN              1024
 #define SERVER_PORT         7000
 #define BACKLOG             10000
+#define FLOC "server_log.txt" //client log
 int fd_server;
-int total_requests;
-int total_data;
-struct {
+int total_requests = 0;
+int total_data =0;
+int connections=0;
+void process_client_data(struct epoll_event *event);
+typedef struct {
     int sock;
-    char host;
+    char *host;
     int requests;
     int data;
 }client_data;
-
+client_data *client_i[EPOLL_QUEUE_LEN];
 static void SystemFatal(const char* message) {
     perror(message);
     exit(EXIT_FAILURE);
@@ -40,14 +43,24 @@ static void SystemFatal(const char* message) {
 
 void close_fd(int signo)
 {
+    FILE *fptr = fopen(FLOC, "a");
+    if(connections!=0 && total_requests !=0)
+    {
+        fprintf(fptr, "------------------\nServer results\n%d total connections\n%d total requests\n%d total data sent\n"
+                      "Average of %d requests per connection\nAverage of %d bytes sent to each client\nAverage of %d bytes per message\n"
+                ,connections, total_requests,total_data,total_requests/connections,total_data/connections,total_data/total_requests);
+    }
+
+    fclose(fptr);
     close(fd_server);
     exit(EXIT_SUCCESS);
 }
 
-void open_fd()
+void open_fd(int port)
 {
     if (listen (fd_server, BACKLOG) == -1)
         SystemFatal("listen");
+    printf("Server listening on port %d...\n", port);
 }
 
 int set_not_block(int sockfd)
@@ -69,12 +82,7 @@ int set_not_block(int sockfd)
     return 0;
 }
 
-int create_listening()
-{
-    fd_server = socket (AF_INET, SOCK_STREAM, 0);
-    if (fd_server == -1)
-        SystemFatal("socket");
-}
+
 
 // set up the signal handler to close the server socket when CTRL-c is received
 void sig_handler()
@@ -85,6 +93,11 @@ void sig_handler()
     if ((sigemptyset (&act.sa_mask) == -1 || sigaction (SIGINT, &act, NULL) == -1))
     {
         perror ("Failed to set SIGINT handler");
+        exit (EXIT_FAILURE);
+    }
+    if ((sigemptyset (&act.sa_mask) == -1 || sigaction (SIGTERM, &act, NULL) == -1))
+    {
+        perror ("Failed to set SIGTERM handler");
         exit (EXIT_FAILURE);
     }
 }
@@ -118,37 +131,50 @@ void listen_sock_setup()
 
 
 
-static int read_sock(int fd)
+static int read_sock(int fd, struct epoll_event *event)
 {
-    int	n, bytes_to_read,iterations;
+    int	n = -1, bytes_to_read;
     char	*bp, buf[BUFLEN];
-    int count = 0;
+
     char *end = "\n";
+    bp = buf;
+    bytes_to_read = BUFLEN;
     while (TRUE)
     {
-        bp = buf;
-        bytes_to_read = BUFLEN;
-        while ((n = recv (fd, bp, bytes_to_read, 0)) < BUFLEN)
+        n = recv (fd, bp, bytes_to_read, MSG_DONTWAIT);
+        if (n > 0)
         {
             bp += n;
             bytes_to_read -= n;
-            if (errno == EWOULDBLOCK)
-            {
-                continue;
-            }
             //CHECK IF DATA IS DONE SENDING BEFORE CLOSING TO ADD
             if(strstr(buf,end) != NULL){
                 //printf ("sending:%s\n", buf);
                 int bytes_rec = BUFLEN - bytes_to_read;
+                client_i[event->data.fd]->data+=bytes_rec;
+                client_i[event->data.fd]->requests++;
                 send(fd,buf,bytes_rec,0);
                 return TRUE;
             }
-
+            continue;
         }
-        //printf ("sending:%s\n", buf);
-        send (fd, buf, BUFLEN, 0);
-        //close (fd);
-        return TRUE;
+        if(n == 0){
+            process_client_data(event);
+            close(fd);
+            return FALSE;
+        }
+        if (errno == EINTR)
+        {
+            continue;
+        }
+        if (errno ==EAGAIN)
+        {
+            return FALSE;
+        } else {
+            process_client_data(event);
+            close(fd);
+            return FALSE;
+        }
+
     }
     //close(fd);
     return FALSE;
@@ -185,13 +211,32 @@ void epoll_connect(int *epoll)
     // Add the new socket descriptor to the epoll loop
     event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET| EPOLLRDHUP | EAGAIN;
     event.data.fd = fd_new;
+        if(!client_i[fd_new]) {
+            client_i[fd_new] = malloc(sizeof(client_data));
+            client_i[fd_new]->sock = fd_new;
+            client_i[fd_new]->host = inet_ntoa(remote_addr.sin_addr);
+            client_i[fd_new]->data = 0;
+            client_i[fd_new]->requests = 0;
+            //event.data.u64 = i;
+
+        }else{
+            SystemFatal("Error making client array");
+        }
+
+
     if (epoll_ctl (*epoll, EPOLL_CTL_ADD, fd_new, &event) == -1)
         SystemFatal ("epoll_ctl");
-
+    connections++;
     printf(" Remote Address:  %s\n", inet_ntoa(remote_addr.sin_addr));
 }
 
-
+void process_client_data(struct epoll_event *event)
+{
+    total_requests += client_i[event->data.fd]->requests;
+    total_data += client_i[event->data.fd]->data;
+    free(client_i[event->data.fd] );
+    client_i[event->data.fd] = NULL;
+}
 
 
 
@@ -199,7 +244,10 @@ void epoll_connect(int *epoll)
 void epoll_loop(int *epoll)
 {
     int epoll_fd = *epoll;
-    int num_fds,i,thread_id;
+    int num_fds,i;
+    for (i = 0; i < EPOLL_QUEUE_LEN; i++)
+        client_i[i] = NULL;
+
     static struct epoll_event events[EPOLL_QUEUE_LEN], event;
     event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET| EPOLLRDHUP | EAGAIN;
     event.data.fd = fd_server;
@@ -215,7 +263,7 @@ void epoll_loop(int *epoll)
             continue;
 
         omp_set_num_threads(num_fds);
-        #pragma omp parallel private(thread_id)
+        #pragma omp parallel
         {
             #pragma omp for
             for (i = 0; i < num_fds; i++) {
@@ -223,13 +271,15 @@ void epoll_loop(int *epoll)
                 if (events[i].events & (EPOLLERR))
                 {
                     fputs("epoll: EPOLLERR", stderr);
+                    process_client_data(&events[i]);
                     close(events[i].data.fd);
                     continue;
                 }
                 //Case 2 close
                 if(events[i].events & (EPOLLHUP |EPOLLRDHUP))
                 {
-                    printf("Connection closed\n");
+                    printf("Connection from %s closed\n", client_i[events[i].data.u64]->host);
+                    process_client_data(&events[i]);
                     close(events[i].data.fd);
                     continue;
                 }
@@ -240,7 +290,7 @@ void epoll_loop(int *epoll)
                     continue;
                 }
                 //Case 4: A socket has read data
-                read_sock(events[i].data.fd);
+                read_sock(events[i].data.fd, &events[i]);
 
             }
 
@@ -250,11 +300,24 @@ void epoll_loop(int *epoll)
 }
 
 int main(int argc, char* argv[]) {
-    int port = SERVER_PORT;
+
+    int port;
+    switch(argc)
+    {
+        case 1:
+            port = SERVER_PORT;	// Use the default port
+            break;
+        case 2:
+            port = atoi(argv[1]);	// Get user specified port
+            break;
+        default:
+            fprintf(stderr, "Usage: %s [port]\n", argv[0]);
+            exit(1);
+    }
     sig_handler();
     listen_sock_setup();
     bind_sock(port);
-    open_fd();
+    open_fd(port);
     int epoll_fd;
     epoll_descriptor(&epoll_fd);
     epoll_loop(&epoll_fd);

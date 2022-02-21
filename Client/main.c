@@ -1,5 +1,5 @@
 /*
---  Compile: gcc -Wall -ggdb -o epollc epoll_clnt.c
+--  Compile: gcc -Wall -ggdb -o epollc main.c -pthread
 ---------------------------------------------------------------------------------------*/
 #include <stdio.h>
 #include <netdb.h>
@@ -14,11 +14,14 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <error.h>
 
 #define SERVER_TCP_PORT		7000	// Default port
 #define BUFLEN			    1024 	// Buffer length
 #define CONNECTION_LIMIT    15000   // Max # of clients
 #define ITER_LIMIT          10000   // Max # of iterations
+#define FLOC "client_log.txt" //client log
+#define TIME_OUT            100
 typedef struct
 {
     int  port, message_len,num_connections, iterations;
@@ -28,6 +31,7 @@ typedef struct
     long total_time;
     int total_bytes;
     int total_requests;
+    int thread_id;
 }args;
 pthread_cond_t cond1 = PTHREAD_COND_INITIALIZER;
 int all_conn=1;
@@ -44,8 +48,8 @@ long delay (struct timeval t1, struct timeval t2)
 {
     long d;
 
-    d = (t2.tv_sec - t1.tv_sec) * 1000;
-    d += ((t2.tv_usec - t1.tv_usec + 500) / 1000);
+    d = (t2.tv_sec - t1.tv_sec) * 1000000;
+    d += ((t2.tv_usec - t1.tv_usec ));
     return(d);
 }
 
@@ -58,7 +62,7 @@ void *client_thread(void *info_ptr) {
     char str[16];
     struct hostent	*hp;
     struct sockaddr_in server;
-    static char *end = "\n";
+
 
 
     struct  timeval start_echo, end_echo;
@@ -78,6 +82,18 @@ void *client_thread(void *info_ptr) {
         perror("Cannot create socket");
         exit(1);
     }
+
+    struct timeval timeout;
+    timeout.tv_sec = TIME_OUT;
+    timeout.tv_usec = 0;
+
+    if (setsockopt (sd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                    sizeof timeout) < 0)
+        SystemFatal("setsockopt failed\n");
+
+    if (setsockopt (sd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                    sizeof timeout) < 0)
+        SystemFatal("setsockopt failed\n");
 
     bzero((char *)&server, sizeof(struct sockaddr_in));
     server.sin_family = AF_INET;
@@ -126,8 +142,15 @@ void *client_thread(void *info_ptr) {
         n = 0;
         while ((n = recv (sd, bp, bytes_to_read, 0)) < (message_len+1))
         {
+            if(n < 0){
+                printf("Connection timeout %d\n", a->thread_id);
+                close(sd);
+                return NULL;
+
+            }
             bp += n;
             bytes_to_read -= n;
+
 
         }
         gettimeofday (&end_echo, NULL); // end delay measure
@@ -137,8 +160,9 @@ void *client_thread(void *info_ptr) {
         fflush(stdout);
     }
 
-    printf("done\n");
+    printf("done %d\n", a->thread_id);
     close (sd);
+    return NULL;
 }
 
 int setup(int *num_connections, int *message_len, int *iterations)
@@ -175,7 +199,7 @@ int setup(int *num_connections, int *message_len, int *iterations)
 
 int main (int argc, char **argv)
 {
-
+    FILE *fptr = fopen(FLOC, "a");
     int  port, num_connections, message_len, iterations;
     char  *host;
 
@@ -208,6 +232,7 @@ int main (int argc, char **argv)
         thread_info[i]->iterations=iterations;
         thread_info[i]->message_len = message_len;
         thread_info[i]->num_connections = num_connections;
+        thread_info[i]->thread_id = i;
         if(pthread_create(&threads[i], NULL, client_thread,(void * )thread_info[i])!= 0)
         {
             printf("error in pthread");
@@ -217,15 +242,32 @@ int main (int argc, char **argv)
         pthread_join(threads[i], NULL);
 
     }
+    int avg_req = 0;
+    int avg_bytes = 0;
+    long avg_echo = 0;
+    int time_outs = 0;
     for(int i =0; i<num_connections;i++) {
+        avg_req += thread_info[i]->total_requests;
+        if(thread_info[i]->total_requests!=0)
+        {
+
+            avg_bytes += thread_info[i]->total_bytes / thread_info[i]->total_requests;
+            avg_echo += thread_info[i]->total_time/ thread_info[i]->total_requests;
+        }
+        if(thread_info[i]->total_requests< iterations)
+        {
+            time_outs++;
+        }
         free(thread_info[i]);
 
     }
-
-
-    //fork or create threads here
-
-
+    avg_req /= num_connections;
+    avg_bytes /= num_connections;
+    avg_echo /= num_connections;
+    fprintf(fptr,"--------------\nConnection with:\n%d Number of Clients\n%d bytes of data for each message +1 for end char\nEach client sending %d messages\n"
+                 "||||||RESULTS|||||||\n%d average request from each client\n%d average data sent\n%ld microsecond average response time\n%d Timeouts\n",
+                 num_connections,message_len,iterations,avg_req,avg_bytes,avg_echo,time_outs);
+    fclose(fptr);
     return (0);
 }
 
