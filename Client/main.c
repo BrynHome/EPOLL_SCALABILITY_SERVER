@@ -21,7 +21,7 @@
 #define CONNECTION_LIMIT    15000   // Max # of clients
 #define ITER_LIMIT          10000   // Max # of iterations
 #define FLOC "client_log.txt" //client log
-#define TIME_OUT            100
+#define TIME_OUT            5
 typedef struct
 {
     int  port, message_len,num_connections, iterations;

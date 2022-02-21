@@ -262,7 +262,7 @@ void epoll_loop(int *epoll)
             //SystemFatal ("Error in epoll_wait!");
             continue;
 
-        omp_set_num_threads(num_fds);
+        //omp_set_num_threads(num_fds);
         #pragma omp parallel
         {
             #pragma omp for

@@ -1,0 +1,40 @@
+--------------
+Connection with:
+10 Number of Clients
+10 bytes of data for each message +1 for end char
+Each client sending 10 messages
+||||||RESULTS|||||||
+2 average request from each client
+2 average data sent
+1252 microsecond average response time
+8 Timeouts
+--------------
+Connection with:
+10 Number of Clients
+10 bytes of data for each message +1 for end char
+Each client sending 10 messages
+||||||RESULTS|||||||
+2 average request from each client
+2 average data sent
+1244 microsecond average response time
+8 Timeouts
+--------------
+Connection with:
+10 Number of Clients
+10 bytes of data for each message +1 for end char
+Each client sending 10 messages
+||||||RESULTS|||||||
+2 average request from each client
+2 average data sent
+207 microsecond average response time
+8 Timeouts
+--------------
+Connection with:
+10 Number of Clients
+10 bytes of data for each message +1 for end char
+Each client sending 10 messages
+||||||RESULTS|||||||
+10 average request from each client
+11 average data sent
+2136 microsecond average response time
+0 Timeouts
