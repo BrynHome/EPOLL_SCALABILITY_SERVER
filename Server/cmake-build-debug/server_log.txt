@@ -62,3 +62,4 @@ Server results
 Average of 10 requests per connection
 Average of 110 bytes sent to each client
 Average of 11 bytes per message
+-------------------------Host 127.0.0.1 sent 128000 messages totalling 14644000 bytes

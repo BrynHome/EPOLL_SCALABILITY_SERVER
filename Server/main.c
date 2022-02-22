@@ -47,6 +47,7 @@ void epoll_descriptor(int *epoll_fd);
 
 client_data client_i[1000];
 static void SystemFatal(const char* message) {
+    close(fd_server);
     perror(message);
     exit(EXIT_FAILURE);
 }
@@ -54,14 +55,26 @@ static void SystemFatal(const char* message) {
 void close_fd(int signo)
 {
     FILE *fptr = fopen(FLOC, "a+");
-    if(connections!=0 && total_requests !=0)
+    if(fptr == NULL)
     {
-        fprintf(fptr, "------------------\nServer results\n%d total connections\n%d total requests\n%d total data sent\n"
-                      "Average of %d requests per connection\nAverage of %d bytes sent to each client\nAverage of %d bytes per message\n"
-                ,connections, total_requests,total_data,total_requests/connections,total_data/connections,total_data/total_requests);
+        SystemFatal("error opening file");
     }
+    int i;
+    fprintf(fptr, "-------------------------\n");
+    for(i =0;i< 1000; i++)
+    {
+        if(client_i[i].host[0] == '\0')
+            break;
+        fprintf(fptr, "Host %s sent %d messages totalling %d bytes\n"
+                ,client_i[i].host,client_i[i].requests,client_i[i].data);
+    }
+    printf("Results written, closing server");
 
-    fclose(fptr);
+
+    if(fclose(fptr))
+    {
+        fprintf(stderr, "error closing file");
+    }
     close(fd_server);
     exit(EXIT_SUCCESS);
 }

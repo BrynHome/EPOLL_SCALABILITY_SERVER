@@ -138,3 +138,23 @@ Each client sending 82 messages
 445 average data sent
 8610 microsecond average response time
 0 Timeouts
+--------------
+Connection with:
+500 Number of Clients
+100 bytes of data for each message +1 for end char
+Each client sending 100 messages
+||||||RESULTS|||||||
+100 average request from each client
+101 average data sent
+7002 microsecond average response time
+0 Timeouts
+--------------
+Connection with:
+600 Number of Clients
+122 bytes of data for each message +1 for end char
+Each client sending 130 messages
+||||||RESULTS|||||||
+130 average request from each client
+123 average data sent
+7591 microsecond average response time
+0 Timeouts
