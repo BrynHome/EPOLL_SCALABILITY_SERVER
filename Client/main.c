@@ -171,7 +171,7 @@ int setup(int *num_connections, int *message_len, int *iterations)
     printf("Num clients(Limit here): ");
     fgets(ibuf, BUFLEN, stdin);
     *num_connections = atoi(ibuf);
-    if(1 > *num_connections||*num_connections > 15000)
+    if(1 > *num_connections||*num_connections > CONNECTION_LIMIT)
     {
         SystemFatal("Improper number of connections");
         return 0;
@@ -258,6 +258,8 @@ int main (int argc, char **argv)
         {
             time_outs++;
         }
+        printf("----------------\nThread %d\n%d total request done\n%d total bytes sent\n%ld average response time in microseconds\n",
+               i,thread_info[i]->total_requests,thread_info[i]->total_bytes,(thread_info[i]->total_time/ thread_info[i]->total_requests));
         free(thread_info[i]);
 
     }
