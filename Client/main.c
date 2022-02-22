@@ -18,7 +18,7 @@
 
 #define SERVER_TCP_PORT		7000	// Default port
 #define BUFLEN			    1024 	// Buffer length
-#define CONNECTION_LIMIT    15000   // Max # of clients
+#define CONNECTION_LIMIT    30000   // Max # of clients
 #define ITER_LIMIT          10000   // Max # of iterations
 #define FLOC "client_log.txt" //client log
 #define TIME_OUT            10

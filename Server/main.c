@@ -31,7 +31,7 @@ int connections=0;
 typedef struct {
     char host[253];
     int requests;
-    int data;
+    long data;
 }client_data;
 void adjust_client_info(client_data *clients, int fd, int bytes);
 void close_fd(int signo);
@@ -65,7 +65,7 @@ void close_fd(int signo)
     {
         if(client_i[i].host[0] == '\0')
             break;
-        fprintf(fptr, "Host %s sent %d messages totalling %d bytes\n"
+        fprintf(fptr, "Host %s sent %d messages totalling %ld bytes\n"
                 ,client_i[i].host,client_i[i].requests,client_i[i].data);
     }
     printf("Results written, closing server");
