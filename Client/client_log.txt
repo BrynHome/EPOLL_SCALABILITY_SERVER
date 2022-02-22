@@ -18,3 +18,13 @@ Each client sending 10 messages
 11 average data sent
 493 microsecond average response time
 0 Timeouts
+--------------
+Connection with:
+10 Number of Clients
+10 bytes of data for each message +1 for end char
+Each client sending 10 messages
+||||||RESULTS|||||||
+2 average request from each client
+2 average data sent
+75 microsecond average response time
+8 Timeouts

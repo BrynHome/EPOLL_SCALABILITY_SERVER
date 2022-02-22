@@ -2,7 +2,6 @@
 -- Compile: gcc -Wall -ggdb -o epolls main.c -fopenmp
 ---------------------------------------------------------------------------------------*/
 
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -15,27 +14,38 @@
 #include <strings.h>
 #include <arpa/inet.h>
 #include <signal.h>
-#include <omp.h>
 
 #define TRUE 		        1
 #define FALSE 		        0
-#define EPOLL_QUEUE_LEN    50000
+#define EPOLL_QUEUE_LEN     256
 #define BUFLEN              1024
 #define SERVER_PORT         7000
-#define BACKLOG             10000
+
 #define FLOC "server_log.txt" //client log
 int fd_server;
 int total_requests = 0;
 int total_data =0;
 int connections=0;
-void process_client_data(struct epoll_event *event);
+
+
 typedef struct {
-    int sock;
-    char *host;
+    char host[253];
     int requests;
     int data;
 }client_data;
-client_data *client_i[EPOLL_QUEUE_LEN];
+void adjust_client_info(client_data *clients, int fd, int bytes);
+void close_fd(int signo);
+void open_fd(int port);
+void sig_handler();
+void bind_sock(int port);
+void listen_sock_setup();
+static int read_sock(int fd);
+_Noreturn void epoll_loop(int *epoll);
+void close_conn(int epoll_fd, int fd);
+void epoll_connect(int epoll);
+void epoll_descriptor(int *epoll_fd);
+
+client_data client_i[1000];
 static void SystemFatal(const char* message) {
     perror(message);
     exit(EXIT_FAILURE);
@@ -43,7 +53,7 @@ static void SystemFatal(const char* message) {
 
 void close_fd(int signo)
 {
-    FILE *fptr = fopen(FLOC, "a");
+    FILE *fptr = fopen(FLOC, "a+");
     if(connections!=0 && total_requests !=0)
     {
         fprintf(fptr, "------------------\nServer results\n%d total connections\n%d total requests\n%d total data sent\n"
@@ -58,28 +68,9 @@ void close_fd(int signo)
 
 void open_fd(int port)
 {
-    if (listen (fd_server, BACKLOG) == -1)
+    if (listen (fd_server, SOMAXCONN) == -1)
         SystemFatal("listen");
     printf("Server listening on port %d...\n", port);
-}
-
-int set_not_block(int sockfd)
-{
-    int flags, s;
-    flags = fcntl(sockfd, F_GETFL, 0);
-    if(flags == -1)
-    {
-        perror("fcntl");
-        return -1;
-    }
-    flags |= O_NONBLOCK;
-    s = fcntl(sockfd, F_SETFL, flags);
-    if(s == -1)
-    {
-        perror("fcntl");
-        return -1;
-    }
-    return 0;
 }
 
 
@@ -125,13 +116,14 @@ void listen_sock_setup()
     if (setsockopt (fd_server, SOL_SOCKET, SO_REUSEADDR, &arg, sizeof(arg)) == -1)
         SystemFatal("setsockopt");
 
-    set_not_block(fd_server);
+    if (fcntl(fd_server, F_SETFL, O_NONBLOCK | fcntl (fd_server, F_GETFL, 0)) == -1)
+        SystemFatal("Set blocking");
 
 }
 
 
 
-static int read_sock(int fd, struct epoll_event *event)
+static int read_sock(int fd)
 {
     int	n = -1, bytes_to_read;
     char	*bp, buf[BUFLEN];
@@ -141,7 +133,13 @@ static int read_sock(int fd, struct epoll_event *event)
     bytes_to_read = BUFLEN;
     while (TRUE)
     {
-        n = recv (fd, bp, bytes_to_read, MSG_DONTWAIT);
+        n = recv (fd, bp, bytes_to_read, 0);
+        if(n == -1)
+        {
+            if(errno == EWOULDBLOCK)
+                continue;
+            return FALSE;
+        }
         if (n > 0)
         {
             bp += n;
@@ -150,30 +148,16 @@ static int read_sock(int fd, struct epoll_event *event)
             if(strstr(buf,end) != NULL){
                 //printf ("sending:%s\n", buf);
                 int bytes_rec = BUFLEN - bytes_to_read;
-                client_i[event->data.fd]->data+=bytes_rec;
-                client_i[event->data.fd]->requests++;
+                adjust_client_info(client_i,fd,bytes_rec);
                 send(fd,buf,bytes_rec,0);
                 return TRUE;
             }
             continue;
         }
         if(n == 0){
-            process_client_data(event);
-            close(fd);
             return FALSE;
         }
-        if (errno == EINTR)
-        {
-            continue;
-        }
-        if (errno ==EAGAIN)
-        {
-            return FALSE;
-        } else {
-            process_client_data(event);
-            close(fd);
-            return FALSE;
-        }
+
 
     }
     //close(fd);
@@ -186,11 +170,42 @@ void epoll_descriptor(int *epoll_fd)
         SystemFatal("epoll_create");
 }
 
+void adjust_client_info(client_data *clients, int fd, int bytes)
+{
+    int i;
+    struct sockaddr_in addr;
+    socklen_t addr_size = sizeof(struct sockaddr_in);
+    char host[253];
+    getpeername(fd,(struct sockaddr *) &addr, &addr_size);
+    strcpy(host, inet_ntoa(addr.sin_addr));
 
-void epoll_connect(int *epoll)
+    #pragma omp critical
+    {
+        for (i = 0; i < EPOLL_QUEUE_LEN; i++) {
+            if(clients[i].host[0] != '\0')
+            {
+                if(strcmp(clients[i].host,host) == 0)
+                {
+                    clients[i].data+=bytes;
+                    clients[i].requests++;
+                    break;
+                }
+            }else{
+                strcpy(clients[i].host,host);
+                clients[i].requests =1;
+                clients[i].data = bytes;
+                break;
+            }
+
+        }
+    };
+}
+
+
+void epoll_connect(int epoll)
 {
     int fd_new;
-    static struct epoll_event event;
+    struct epoll_event event;
     struct sockaddr_in remote_addr;
     socklen_t addr_size = sizeof(struct sockaddr_in);
     fd_new = accept (fd_server, (struct sockaddr*) &remote_addr, &addr_size);
@@ -209,47 +224,35 @@ void epoll_connect(int *epoll)
         SystemFatal("fcntl");
     //event->events = EPOLLIN | EPOLLET;
     // Add the new socket descriptor to the epoll loop
-    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET| EPOLLRDHUP | EAGAIN;
+    memset(&event,0,sizeof (struct epoll_event));
+    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
     event.data.fd = fd_new;
-        if(!client_i[fd_new]) {
-            client_i[fd_new] = malloc(sizeof(client_data));
-            client_i[fd_new]->sock = fd_new;
-            client_i[fd_new]->host = inet_ntoa(remote_addr.sin_addr);
-            client_i[fd_new]->data = 0;
-            client_i[fd_new]->requests = 0;
-            //event.data.u64 = i;
-
-        }else{
-            SystemFatal("Error making client array");
-        }
-
-
-    if (epoll_ctl (*epoll, EPOLL_CTL_ADD, fd_new, &event) == -1)
+    if (epoll_ctl (epoll, EPOLL_CTL_ADD, fd_new, &event) == -1)
         SystemFatal ("epoll_ctl");
-    connections++;
+
+
     printf(" Remote Address:  %s\n", inet_ntoa(remote_addr.sin_addr));
 }
 
-void process_client_data(struct epoll_event *event)
+
+
+void close_conn(int epoll_fd, int fd)
 {
-    total_requests += client_i[event->data.fd]->requests;
-    total_data += client_i[event->data.fd]->data;
-    free(client_i[event->data.fd] );
-    client_i[event->data.fd] = NULL;
+    if(epoll_fd != -1)
+        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL);
+    if(close(fd) == -1)
+        SystemFatal("Error closing socket");
 }
 
 
-
-
-void epoll_loop(int *epoll)
+_Noreturn void epoll_loop(int *epoll)
 {
     int epoll_fd = *epoll;
     int num_fds,i;
-    for (i = 0; i < EPOLL_QUEUE_LEN; i++)
-        client_i[i] = NULL;
+
 
     static struct epoll_event events[EPOLL_QUEUE_LEN], event;
-    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET| EPOLLRDHUP | EAGAIN;
+    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP ;
     event.data.fd = fd_server;
     if (epoll_ctl (epoll_fd, EPOLL_CTL_ADD, fd_server, &event) == -1)
         SystemFatal("epoll_ctl");
@@ -257,44 +260,38 @@ void epoll_loop(int *epoll)
     while (TRUE)
     {
         num_fds = epoll_wait (epoll_fd, events, EPOLL_QUEUE_LEN, -1);
-
         if (num_fds < 0)
-            //SystemFatal ("Error in epoll_wait!");
-            continue;
-
+            SystemFatal ("Error in epoll_wait!");
+            //continue;
         //omp_set_num_threads(num_fds);
         #pragma omp parallel
         {
             #pragma omp for
             for (i = 0; i < num_fds; i++) {
                 // Case 1: Error condition
-                if (events[i].events & (EPOLLERR))
-                {
+                if (events[i].events & (EPOLLERR)) {
                     fputs("epoll: EPOLLERR", stderr);
-                    process_client_data(&events[i]);
-                    close(events[i].data.fd);
+                    close_conn(epoll_fd,events[i].data.fd);
                     continue;
                 }
-                //Case 2 close
-                if(events[i].events & (EPOLLHUP |EPOLLRDHUP))
-                {
-                    printf("Connection from %s closed\n", client_i[events[i].data.u64]->host);
-                    process_client_data(&events[i]);
-                    close(events[i].data.fd);
+                //Case 2: Connection request
+                if (events[i].data.fd == fd_server) {
+                    epoll_connect(epoll_fd);
                     continue;
                 }
-                assert (events[i].events & EPOLLIN);
-                //Case 3: Connection request
-                if(events[i].data.fd == fd_server) {
-                    epoll_connect(&epoll_fd);
+                //Case 3 close
+                if (events[i].events & (EPOLLHUP | EPOLLRDHUP)) {
+                    close_conn(epoll_fd,events[i].data.fd);
                     continue;
                 }
+
+
                 //Case 4: A socket has read data
-                read_sock(events[i].data.fd, &events[i]);
+                read_sock(events[i].data.fd);
 
             }
 
-        }
+        };
     }
     close_fd(0);
 }
